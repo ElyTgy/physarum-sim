@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Physarum Network Builder</title>
+  <style>
+    :root {
+      --bg: #0b0f14;
+      --panel: #11161d;
+      --ink: #e6edf3;
+      --muted: #93a0ad;
+      --accent: #5cf2c8;
+      --warn: #ff6b6b;
+      --ok: #78e08f;
+    }
+    html, body {
+      margin: 0; height: 100%; background: var(--bg); color: var(--ink);
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+      overflow: hidden;
+    }
+    #wrap { display: grid; grid-template-columns: 1fr 310px; height: 100%; }
+    #cwrap { position: relative; background: radial-gradient(1200px 600px at 30% 10%, #0e141b, #070a0f) no-repeat; }
+    canvas { position: absolute; inset: 0; margin: auto; image-rendering: pixelated; background: transparent; }
+    #hud { position: absolute; left: 12px; top: 12px; background: color-mix(in oklab, var(--panel) 80%, transparent); border: 1px solid #1b2330; padding: 10px 12px; border-radius: 14px; backdrop-filter: blur(8px); box-shadow: 0 10px 30px rgba(0,0,0,.35); }
+    #hud .row { display: flex; gap: 12px; align-items: center; }
+    #hud .tag { font: 600 12px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; padding: 6px 8px; border-radius: 10px; border: 1px solid #263042; color: var(--muted); }
+    #hud .kbd { font-weight: 700; color: var(--ink); }
+    #hud .on { color: #061b12; background: var(--accent); border-color: transparent; }
+
+    #side { background: linear-gradient(180deg, #0f141c, #0d1219); border-left: 1px solid #121a24; padding: 16px; box-sizing: border-box; overflow-y: auto; }
+    h1 { font-size: 18px; margin: 6px 0 2px; letter-spacing: .2px; }
+    h2 { font-size: 12px; text-transform: uppercase; color: var(--muted); letter-spacing: .12em; margin: 18px 0 8px; }
+    .card { background: var(--panel); border: 1px solid #1b2330; border-radius: 16px; padding: 12px; margin-bottom: 10px; box-shadow: 0 10px 40px rgba(0,0,0,.25); }
+    .row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .row + .row { margin-top: 10px; }
+    label { font-size: 12px; color: var(--muted); }
+    input[type="range"] { width: 100%; }
+    button { background: #131b26; color: var(--ink); border: 1px solid #223047; border-radius: 12px; padding: 8px 10px; cursor: pointer; font-weight: 600; }
+    button:active { transform: translateY(1px); }
+    button.primary { background: var(--accent); color: #062217; border-color: transparent; }
+    .muted { color: var(--muted); font-size: 12px; }
+    .pill { padding: 4px 8px; border: 1px solid #223047; border-radius: 999px; font: 600 12px ui-monospace, SFMono-Regular, monospace; }
+    .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+    .metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .metric { background: #0e141c; border: 1px solid #1a2332; border-radius: 12px; padding: 10px; }
+    .metric b { font-size: 16px; }
+    .legend { display: flex; gap: 8px; align-items: center; font-size: 12px; color: var(--muted); }
+    .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+    .dot.food { background: #5cf2c8; box-shadow: 0 0 10px #5cf2c8a0; }
+    .dot.repel { background: #ff6b6b; box-shadow: 0 0 10px #ff6b6ba0; }
+    .dot.city { background: #82aaff; box-shadow: 0 0 10px #82aaffa0; }
+    .dot.tube { background: #f5f7fb; }
+    .help { font-size: 12px; color: var(--muted); line-height: 1.5; }
+    a { color: var(--accent); text-decoration: none; }
+  </style>
+</head>
+<body>
+  <div id="wrap">
+    <div id="cwrap">
+      <canvas id="sim"></canvas>
+      <div id="hud">
+        <div class="row" style="gap:8px;margin-bottom:6px;">
+          <span class="tag legend"><span class="dot tube"></span> Tubes</span>
+          <span class="tag legend"><span class="dot food"></span> Food</span>
+          <span class="tag legend"><span class="dot repel"></span> Repellent</span>
+          <span class="tag legend"><span class="dot city"></span> City</span>
+        </div>
+        <div class="row">
+          <span class="tag">Brush: <b id="brushName">Food</b></span>
+          <span class="tag">Deposit <b id="depositVal">1.5</b></span>
+          <span class="tag">A: <b class="kbd" id="aLed">OFF</b></span>
+          <span class="tag">B: <b class="kbd" id="bLed">OFF</b></span>
+        </div>
+      </div>
+    </div>
+    <div id="side">
+      <h1>Physarum Network Builder</h1>
+      <div class="muted">Paint chemoattractant and repellent to guide virtual slime-mold tubes that connect all cities. Optimize for <b>shortest network</b> or <b>fastest connect-all</b>.</div>
+
+      <h2>Controls</h2>
+      <div class="card help">
+        <div>🖱️ Hold <b>Left Mouse</b> (or press <b>A</b>) to paint. Hold <b>B</b> while painting for <b>Repellent</b>. Tap <b>B</b> to toggle brush.</div>
+        <div>🎛️ <b>Dial</b> = slider below or <b>Mouse Wheel</b> (changes deposit rate).</div>
+        <div>🏙️ Press <b>C</b> then click to place a city; press <b>C</b> again to exit city mode.</div>
+        <div>🗑️ Press <b>D</b> then click to delete a city; press <b>D</b> again to exit delete mode.</div>
+        <div>⏯️ Space: pause/resume • <b>R</b>: reset • <b>H</b>: hide/show HUD</div>
+      </div>
+
+      <h2>Session</h2>
+      <div class="card">
+        <div class="metrics">
+          <div class="metric"><label>Connected Cities</label><div><b id="connected">0 / 0</b></div></div>
+          <div class="metric"><label>Active Tube Length</label><div><b id="tubeLen">0</b> cells</div></div>
+          <div class="metric"><label>Time</label><div><b id="timeSec">0.0s</b></div></div>
+          <div class="metric"><label>Best Connect-All</label><div><b id="bestTime">—</b></div></div>
+        </div>
+        <div class="row" style="margin-top:10px;">
+          <button id="resetBtn">Reset</button>
+          <button id="newCitiesBtn">Shuffle Cities</button>
+          <button id="rmvCitiesBtn">Delete Cities</button>
+          <button id="togglePauseBtn">Pause</button>
+        </div>
+      </div>
+
+      <h2>Brush & Agents</h2>
+      <div class="card">
+        <div class="row"><label>Deposit (Dial)</label><input id="deposit" type="range" min="0.2" max="5" value="1.5" step="0.1"></div>
+        <div class="row"><label>Brush Radius</label><input id="radius" type="range" min="2" max="30" value="10" step="1"></div>
+        <div class="row"><label>Agents</label><input id="agents" type="range" min="1000" max="15000" value="6000" step="500"></div>
+        <div class="grid">
+          <button id="brushFood" class="primary">Food</button>
+          <button id="brushRepel">Repellent</button>
+        </div>
+      </div>
+
+      <h2>Fields</h2>
+      <div class="card">
+        <div class="row"><label>Tube Threshold</label><input id="tubeThresh" type="range" min="0.02" max="0.6" value="0.15" step="0.01"></div>
+        <div class="row"><label>Trail Evaporation</label><input id="evap" type="range" min="0.92" max="0.999" value="0.98" step="0.001"></div>
+        <div class="row"><label>Trail Diffusion</label><input id="diff" type="range" min="0" max="0.45" value="0.16" step="0.01"></div>
+        <div class="row"><label>Food Weight</label><input id="wFood" type="range" min="0" max="3" value="1.2" step="0.1"></div>
+        <div class="row"><label>Repel Weight</label><input id="wRepel" type="range" min="0" max="5" value="2.2" step="0.1"></div>
+      </div>
+
+      <h2>How it works</h2>
+      <div class="card help">
+        <p>Thousands of agent particles wander, <b>sampling a chemo field</b> = (trail + food×weight − repellent×weight). They turn toward stronger values, move, and <b>deposit trail</b>. Fields <b>diffuse & evaporate</b> each frame. When trail density crosses a threshold, we render it as <b>tubes</b>.</p>
+        <p>“Cities” inject food continuously. Connect them all with minimal tube length for efficiency.</p>
+      </div>
+
+      <div class="muted" style="margin-top:8px;">Made for custom controllers: map your hardware buttons to keyboard <b>A</b> and <b>B</b>, or just use mouse/keys.</div>
+    </div>
+  </div>
+
+  <script>
+  // === Simulation parameters (many are exposed via UI) ===
+  const GRID_W = 256;   // grid resolution; render scales up for crisp pixels
+  const GRID_H = 144;
+  const AGENT_STEP = 1.0;
+  const SENSOR_DIST = 5;       // grid cells ahead to sample
+  const SENSOR_ANGLE = 0.45;   // radians
+  const TURN_ANGLE = 0.30;     // radians per step toward gradient
+  const RANDOM_STEER = 0.08;   // small jitter to avoid deadlock
+  const FOOD_SOURCE_STRENGTH = 0.045; // continuous city feed per frame
+  const FOOD_CONSUMPTION = 0.20;      // how much food an agent consumes when stepping onto it
+  const TRAIL_DEPOSIT_AGENT = 0.045;  // base agent deposit
+
+  // === DOM refs ===
+  const canvas = document.getElementById('sim');
+  const ctx = canvas.getContext('2d');
+  const hud = {
+    brushName: document.getElementById('brushName'),
+    depositVal: document.getElementById('depositVal'),
+    aLed: document.getElementById('aLed'),
+    bLed: document.getElementById('bLed'),
+  };
+  const ui = {
+    deposit: document.getElementById('deposit'),
+    radius: document.getElementById('radius'),
+    agents: document.getElementById('agents'),
+    brushFood: document.getElementById('brushFood'),
+    brushRepel: document.getElementById('brushRepel'),
+    tubeThresh: document.getElementById('tubeThresh'),
+    evap: document.getElementById('evap'),
+    diff: document.getElementById('diff'),
+    wFood: document.getElementById('wFood'),
+    wRepel: document.getElementById('wRepel'),
+    resetBtn: document.getElementById('resetBtn'),
+    newCitiesBtn: document.getElementById('newCitiesBtn'),
+    rmvCitiesBtn: document.getElementById('rmvCitiesBtn'),
+    togglePauseBtn: document.getElementById('togglePauseBtn'),
+    connected: document.getElementById('connected'),
+    tubeLen: document.getElementById('tubeLen'),
+    timeSec: document.getElementById('timeSec'),
+    bestTime: document.getElementById('bestTime'),
+  };
+
+  // === Canvas sizing ===
+  function fitCanvas() {
+    const {clientWidth: w, clientHeight: h} = document.getElementById('cwrap');
+    const scale = Math.min(w / GRID_W, h / GRID_H) | 0; // integer scale for pixelated rendering
+    const cw = GRID_W * Math.max(1, scale);
+    const ch = GRID_H * Math.max(1, scale);
+    canvas.width = cw; canvas.height = ch;
+    canvas.style.width = cw + 'px';
+    canvas.style.height = ch + 'px';
+  }
+  window.addEventListener('resize', fitCanvas);
+  fitCanvas();
+
+  // === Fields ===
+  const N = GRID_W * GRID_H;
+  let trail = new Float32Array(N);
+  let food  = new Float32Array(N);
+  let repel = new Float32Array(N);
+  let trailNext = new Float32Array(N);
+  let foodNext  = new Float32Array(N);
+  let repelNext = new Float32Array(N);
+
+  // Cities (continuous food sources)
+  const cities = [];
+  function addCity(x, y) { cities.push({x, y}); }
+  function removeCity(x, y) { 
+    // Find cities within a small radius (5 pixels)
+    const radius = 20;
+    const index = cities.findIndex(city => {
+      const dx = city.x - x;
+      const dy = city.y - y;
+      return (dx * dx + dy * dy) <= radius * radius;
+    });
+    if (index !== -1) {
+        cities.splice(index, 1);
+        return true; // city was removed
+    }
+    return false; // no city found
+  }
+  function clearCities() { cities.length = 0; }
+
+  // === Agents ===
+  let AGENTS = parseInt(ui.agents.value, 10);
+  let ax = new Float32Array(AGENTS);
+  let ay = new Float32Array(AGENTS);
+  let aa = new Float32Array(AGENTS);
+
+  function seedAgents() {
+    ax = new Float32Array(AGENTS);
+    ay = new Float32Array(AGENTS);
+    aa = new Float32Array(AGENTS);
+    for (let i = 0; i < AGENTS; i++) {
+      // Spawn around cities if present, else randomly
+      if (cities.length) {
+        const c = cities[i % cities.length];
+        const r = 8 + Math.random()*12;
+        const t = Math.random()*Math.PI*2;
+        ax[i] = Math.max(1, Math.min(GRID_W-2, c.x + Math.cos(t)*r));
+        ay[i] = Math.max(1, Math.min(GRID_H-2, c.y + Math.sin(t)*r));
+      } else {
+        ax[i] = Math.random() * GRID_W;
+        ay[i] = Math.random() * GRID_H;
+      }
+      aa[i] = Math.random()*Math.PI*2;
+    }
+  }
+
+  // === Utilities ===
+  const clamp = (v, lo, hi) => v < lo ? lo : (v > hi ? hi : v);
+  const idx = (x, y) => (y|0) * GRID_W + (x|0);
+  function sample(field, x, y) { // nearest neighbor
+    x = Math.max(0, Math.min(GRID_W-1, x|0));
+    y = Math.max(0, Math.min(GRID_H-1, y|0));
+    return field[idx(x,y)];
+  }
+  function depositCircle(field, cx, cy, radius, amount) {
+    const r2 = radius*radius;
+    const x0 = Math.max(1, (cx - radius)|0), x1 = Math.min(GRID_W-2, (cx + radius)|0);
+    const y0 = Math.max(1, (cy - radius)|0), y1 = Math.min(GRID_H-2, (cy + radius)|0);
+    for (let y = y0; y <= y1; y++) {
+      const dy = y - cy; const dy2 = dy*dy;
+      for (let x = x0; x <= x1; x++) {
+        const dx = x - cx; if (dx*dx + dy2 <= r2) {
+          const id = idx(x,y);
+          field[id] = Math.min(1.5, field[id] + amount);
+        }
+      }
+    }
+  }
+
+  // Diffusion + evaporation via 3x3 kernel (simple Laplacian-style)
+  function diffuseEvaporate(src, dst, diffusion, evap) {
+    // kernel weights: center (1-8a), neighbors a each, with small diffusion a
+    const a = diffusion / 8; // distribute equally to 8 neighbors
+    let i = 0;
+    for (let y = 0; y < GRID_H; y++) {
+      for (let x = 0; x < GRID_W; x++, i++) {
+        const c = src[i];
+        const xm = x === 0 ? 0 : -1, xp = x === GRID_W-1 ? 0 : 1;
+        const ym = y === 0 ? 0 : -GRID_W, yp = y === GRID_H-1 ? 0 : GRID_W;
+        const v = c * (1 - 8*a)
+          + a*(src[i + xm] + src[i + xp] + src[i + ym] + src[i + yp]
+          + src[i + xm + ym] + src[i + xp + ym] + src[i + xm + yp] + src[i + xp + yp]);
+        dst[i] = v * evap;
+      }
+    }
+  }
+
+  // === Input mapping ===
+  let isDown = false;  // mouse painting
+  let mouseX = 0, mouseY = 0;
+  let keyA = false, keyB = false;
+  let cityMode = false; // placing cities
+  let deleteMode = false; // deleting cities
+  let showHUD = true;
+
+  canvas.addEventListener('pointerdown', (e) => { isDown = true; setMouse(e); });
+  window.addEventListener('pointerup', () => isDown = false);
+  window.addEventListener('pointermove', setMouse);
+  function setMouse(e) {
+    const rect = canvas.getBoundingClientRect();
+    const sx = (e.clientX - rect.left) / rect.width;
+    const sy = (e.clientY - rect.top) / rect.height;
+    mouseX = clamp(Math.round(sx * GRID_W), 0, GRID_W-1);
+    mouseY = clamp(Math.round(sy * GRID_H), 0, GRID_H-1);
+    if (isDown) {
+      if (cityMode) {
+        addCity(mouseX, mouseY);
+        cityMode = false;
+        flashButton('newCitiesBtn');
+      } else if (deleteMode) {
+        const removed = removeCity(mouseX, mouseY);
+        if (removed) {
+          deleteMode = false;
+          updateModeButtons();
+          flashButton('rmvCitiesBtn');
+          blinkSideHint('City deleted!');
+        } else {
+          blinkSideHint('No city found here');
+        }
+      } else {
+        paintAtMouse();
+      }
+    }
+  }
+
+  window.addEventListener('keydown', (e) => {
+    if (e.repeat) return;
+    if (e.key === 'a' || e.key === 'A') keyA = true;
+    if (e.key === 'b' || e.key === 'B') {
+      keyB = true;
+      // tap B toggles default brush
+      toggleBrush();
+    }
+    if (e.key === ' ') { togglePause(); }
+    if (e.key === 'r' || e.key === 'R') { reset(); }
+    if (e.key === 'c' || e.key === 'C') { 
+      cityMode = !cityMode; 
+      deleteMode = false; // exit delete mode if entering city mode
+      updateModeButtons();
+      blinkSideHint(cityMode ? 'Click to place a city…' : 'City mode off'); 
+    }
+    if (e.key === 'd' || e.key === 'D') { 
+      deleteMode = !deleteMode; 
+      cityMode = false; // exit city mode if entering delete mode
+      updateModeButtons();
+      blinkSideHint(deleteMode ? 'Click to delete a city…' : 'Delete mode off'); 
+    }
+    if (e.key === 'h' || e.key === 'H') { showHUD = !showHUD; document.getElementById('hud').style.display = showHUD ? 'block' : 'none'; }
+  });
+  window.addEventListener('keyup', (e) => {
+    if (e.key === 'a' || e.key === 'A') keyA = false;
+    if (e.key === 'b' || e.key === 'B') keyB = false;
+  });
+  window.addEventListener('wheel', (e) => {
+    const v = parseFloat(ui.deposit.value);
+    const nv = clamp(v + (e.deltaY < 0 ? 0.1 : -0.1), parseFloat(ui.deposit.min), parseFloat(ui.deposit.max));
+    ui.deposit.value = nv.toFixed(1);
+    ui.deposit.dispatchEvent(new Event('input'));
+  }, {passive:true});
+
+  function blinkSideHint(text) {
+    const el = document.createElement('div');
+    el.textContent = text;
+    el.style.position = 'absolute';
+    el.style.left = '12px';
+    el.style.bottom = '12px';
+    el.style.background = 'rgba(0,0,0,.5)';
+    el.style.border = '1px solid #223047';
+    el.style.padding = '6px 8px';
+    el.style.borderRadius = '8px';
+    el.style.fontSize = '12px';
+    el.style.pointerEvents = 'none';
+    document.getElementById('cwrap').appendChild(el);
+    setTimeout(() => el.remove(), 1500);
+  }
+
+  function flashButton(id) {
+    const b = document.getElementById(id);
+    const old = b.style.boxShadow;
+    b.style.boxShadow = '0 0 0 3px #5cf2c866';
+    setTimeout(() => b.style.boxShadow = old, 300);
+  }
+
+  // === Brush state ===
+  let brush = 'food'; // 'food' | 'repel'
+  function toggleBrush() {
+    brush = (brush === 'food') ? 'repel' : 'food';
+    updateBrushButtons();
+  }
+  function setBrush(b) { brush = b; updateBrushButtons(); }
+  function updateBrushButtons() {
+    ui.brushFood.classList.toggle('primary', brush === 'food');
+    ui.brushRepel.classList.toggle('primary', brush === 'repel');
+    hud.brushName.textContent = brush === 'food' ? 'Food' : 'Repellent';
+  }
+  
+  function updateModeButtons() {
+    ui.newCitiesBtn.classList.toggle('primary', cityMode);
+    ui.rmvCitiesBtn.classList.toggle('primary', deleteMode);
+  }
+  ui.brushFood.addEventListener('click', () => setBrush('food'));
+  ui.brushRepel.addEventListener('click', () => setBrush('repel'));
+
+  function paintAtMouse() {
+    // Don't paint if in city mode or delete mode
+    if (cityMode || deleteMode) return;
+    
+    const rad = parseInt(ui.radius.value, 10);
+    const amount = parseFloat(ui.deposit.value) * 0.08; // UI dial
+    // If A+B both held -> repellent overrides
+    const mode = (keyA || isDown) && keyB ? 'repel' : brush;
+    if (mode === 'food') depositCircle(food, mouseX, mouseY, rad, amount);
+    else depositCircle(repel, mouseX, mouseY, rad, amount);
+  }
+
+  // Reflect HUD key states continuously
+  function updateKeyHUD() {
+    hud.aLed.textContent = (keyA || isDown) ? 'ON' : 'OFF';
+    hud.aLed.parentElement.classList.toggle('on', keyA || isDown);
+    hud.bLed.textContent = keyB ? 'ON' : 'OFF';
+    hud.bLed.parentElement.classList.toggle('on', keyB);
+    hud.depositVal.textContent = parseFloat(ui.deposit.value).toFixed(1);
+  }
+
+  // === Rendering ===
+  const img = ctx.createImageData(GRID_W, GRID_H);
+  function render(tubeThreshold) {
+    // draw tubes (thresholded trail) + food/repel overlays
+    const data = img.data;
+    for (let i = 0; i < N; i++) {
+      const tr = trail[i];
+      const isTube = tr > tubeThreshold;
+      const f = food[i];
+      const r = repel[i];
+      let R = 9, G = 13, B = 18; // base dark
+      if (isTube) { const v = clamp(tr*1.2, 0, 1.2); R += v*240; G += v*245; B += v*250; }
+      // add food glow (cyan/green)
+      if (f > 0.02) { R += f*10; G += f*160; B += f*140; }
+      // add repellent glow (red)
+      if (r > 0.02) { R += r*220; }
+      const o = i*4; data[o] = clamp(R,0,255); data[o+1] = clamp(G,0,255); data[o+2] = clamp(B,0,255); data[o+3] = 255;
+    }
+    // draw to scaled canvas
+    const tmp = document.createElement('canvas');
+    tmp.width = GRID_W; tmp.height = GRID_H;
+    tmp.getContext('2d').putImageData(img, 0, 0);
+    ctx.imageSmoothingEnabled = false;
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    ctx.drawImage(tmp, 0,0, canvas.width, canvas.height);
+
+    // draw cities
+    const scaleX = canvas.width / GRID_W, scaleY = canvas.height / GRID_H;
+    for (const c of cities) {
+      ctx.beginPath();
+      ctx.arc(c.x*scaleX, c.y*scaleY, 6, 0, Math.PI*2);
+      ctx.fillStyle = '#82aaff';
+      ctx.shadowColor = '#82aaff';
+      ctx.shadowBlur = 8; ctx.fill(); ctx.shadowBlur = 0;
+      ctx.lineWidth = 2; ctx.strokeStyle = '#2a3e66'; ctx.stroke();
+    }
+    
+    // draw delete mode indicator
+    if (deleteMode) {
+      ctx.beginPath();
+      ctx.arc(mouseX*scaleX, mouseY*scaleY, 12, 0, Math.PI*2);
+      ctx.strokeStyle = '#ff6b6b';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([5, 5]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      
+      // draw X symbol
+      ctx.beginPath();
+      ctx.moveTo(mouseX*scaleX - 4, mouseY*scaleY - 4);
+      ctx.lineTo(mouseX*scaleX + 4, mouseY*scaleY + 4);
+      ctx.moveTo(mouseX*scaleX + 4, mouseY*scaleY - 4);
+      ctx.lineTo(mouseX*scaleX - 4, mouseY*scaleY + 4);
+      ctx.strokeStyle = '#ff6b6b';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+  }
+
+  // === Simulation step ===
+  let paused = false;
+  let t0 = performance.now();
+  let bestConnectSec = null;
+
+  function togglePause() {
+    paused = !paused; ui.togglePauseBtn.textContent = paused ? 'Resume' : 'Pause';
+  }
+  ui.togglePauseBtn.addEventListener('click', togglePause);
+
+  function reset() {
+    trail.fill(0); food.fill(0); repel.fill(0);
+    trailNext.fill(0); foodNext.fill(0); repelNext.fill(0);
+    timeStart = performance.now(); bestConnectSec = bestConnectSec; // keep best
+    seedAgents();
+  }
+  ui.resetBtn.addEventListener('click', reset);
+
+  function shuffleCities() {
+    clearCities();
+    const num = 5 + (Math.random()*4|0);
+    const pad = 14;
+    for (let i=0;i<num;i++) {
+      addCity(pad + Math.random()*(GRID_W-2*pad), pad + Math.random()*(GRID_H-2*pad));
+    }
+    seedAgents();
+  }
+  ui.newCitiesBtn.addEventListener('click', () => { 
+    cityMode = false;
+    deleteMode = false;
+    updateModeButtons();
+    shuffleCities(); 
+    flashButton('newCitiesBtn'); 
+  });
+  ui.rmvCitiesBtn.addEventListener('click', () => { 
+    deleteMode = !deleteMode; 
+    cityMode = false; // exit city mode if entering delete mode
+    updateModeButtons();
+    blinkSideHint(deleteMode ? 'Click to delete a city…' : 'Delete mode off'); 
+  });
+
+  ui.deposit.addEventListener('input', () => { hud.depositVal.textContent = parseFloat(ui.deposit.value).toFixed(1); });
+  ui.radius.addEventListener('input', ()=>{});
+  ui.agents.addEventListener('input', () => {
+    AGENTS = parseInt(ui.agents.value,10);
+    seedAgents();
+  });
+  ui.tubeThresh.addEventListener('input', ()=>{});
+
+  // === Connectivity & metrics ===
+  const comp = new Int32Array(N);
+  function computeMetrics(threshold) {
+    // connected components on thresholded trail
+    comp.fill(-1);
+    let compId = 0;
+    const stack = new Int32Array(N);
+    for (let i=0;i<N;i++) {
+      if (comp[i] !== -1) continue;
+      if (trail[i] <= threshold) { comp[i] = -2; continue; }
+      // flood fill
+      let top=0; stack[top++] = i; comp[i] = compId;
+      while (top) {
+        const p = stack[--top];
+        const x = p % GRID_W, y = (p/GRID_W)|0;
+        for (let dy=-1; dy<=1; dy++) for (let dx=-1; dx<=1; dx++) {
+          if (dx===0 && dy===0) continue;
+          const nx = x+dx, ny=y+dy;
+          if (nx<0||nx>=GRID_W||ny<0||ny>=GRID_H) continue;
+          const q = ny*GRID_W+nx;
+          if (comp[q]===-1 && trail[q] > threshold) { comp[q]=compId; stack[top++]=q; }
+        }
+      }
+      compId++;
+    }
+    // tube length = number of active cells
+    let active = 0; for (let i=0;i<N;i++) if (trail[i] > threshold) active++;
+
+    // map city to component
+    let connectedCount = 0;
+    const cityComps = new Set();
+    for (const c of cities) {
+      const id = comp[idx(c.x|0, c.y|0)];
+      if (id >= 0) { cityComps.add(id); connectedCount++; }
+    }
+    const allConnected = (connectedCount === cities.length && cityComps.size === 1 && cities.length > 0);
+    return {active, connectedCount, allConnected};
+  }
+
+  // === Main loop ===
+  let timeStart = performance.now();
+  function step() {
+    requestAnimationFrame(step);
+    if (paused) return render(parseFloat(ui.tubeThresh.value));
+
+    // --- Paint if needed (continuous while holding A or mouse) ---
+    if ((isDown || keyA) && !cityMode && !deleteMode) paintAtMouse();
+
+    // --- Cities inject food each frame ---
+    for (const c of cities) depositCircle(food, c.x, c.y, 5, FOOD_SOURCE_STRENGTH);
+
+    // --- Agents sense & move ---
+    const wFood = parseFloat(ui.wFood.value);
+    const wRep = parseFloat(ui.wRepel.value);
+
+    for (let i = 0; i < AGENTS; i++) {
+      let x = ax[i], y = ay[i], a = aa[i];
+      // sensor positions
+      const fx = x + Math.cos(a) * SENSOR_DIST;
+      const fy = y + Math.sin(a) * SENSOR_DIST;
+      const lx = x + Math.cos(a - SENSOR_ANGLE) * SENSOR_DIST;
+      const ly = y + Math.sin(a - SENSOR_ANGLE) * SENSOR_DIST;
+      const rx = x + Math.cos(a + SENSOR_ANGLE) * SENSOR_DIST;
+      const ry = y + Math.sin(a + SENSOR_ANGLE) * SENSOR_DIST;
+
+      const vF = sample(trail, fx, fy) + wFood*sample(food, fx, fy) - wRep*sample(repel, fx, fy);
+      const vL = sample(trail, lx, ly) + wFood*sample(food, lx, ly) - wRep*sample(repel, lx, ly);
+      const vR = sample(trail, rx, ry) + wFood*sample(food, rx, ry) - wRep*sample(repel, rx, ry);
+
+      if (vL > vF && vL > vR) a -= TURN_ANGLE; else if (vR > vF && vR > vL) a += TURN_ANGLE; else a += (Math.random()-0.5)*RANDOM_STEER;
+
+      // move
+      x += Math.cos(a)*AGENT_STEP; y += Math.sin(a)*AGENT_STEP;
+      // wrap edges softly
+      if (x < 1) { x = GRID_W-2; } else if (x > GRID_W-2) { x = 1; }
+      if (y < 1) { y = GRID_H-2; } else if (y > GRID_H-2) { y = 1; }
+
+      // deposit trail, consume food
+      const id = idx(x|0, y|0);
+      trail[id] = Math.min(1.5, trail[id] + TRAIL_DEPOSIT_AGENT);
+      const fHere = food[id];
+      if (fHere > 0.001) {
+        const eat = Math.min(FOOD_CONSUMPTION, fHere);
+        food[id] = fHere - eat;
+        trail[id] = Math.min(1.5, trail[id] + eat*0.8); // more trail on food
+      }
+
+      ax[i] = x; ay[i] = y; aa[i] = a;
+    }
+
+    // --- Field evolution ---
+    const evap = parseFloat(ui.evap.value);
+    const diff = parseFloat(ui.diff.value);
+    diffuseEvaporate(trail, trailNext, diff, evap);
+    diffuseEvaporate(food,  foodNext,  diff*0.7, 0.995); // food evaporates slower
+    diffuseEvaporate(repel, repelNext, diff*0.9, 0.985); // repellent lasts longer than trail
+
+    // swap
+    [trail, trailNext] = [trailNext, trail];
+    [food,  foodNext]  = [foodNext,  food];
+    [repel, repelNext] = [repelNext, repel];
+
+    // --- Metrics ---
+    const {active, connectedCount, allConnected} = computeMetrics(parseFloat(ui.tubeThresh.value));
+    ui.connected.textContent = `${connectedCount} / ${cities.length}`;
+    ui.tubeLen.textContent = active.toString();
+
+    const t = (performance.now() - timeStart) / 1000;
+    ui.timeSec.textContent = t.toFixed(1) + 's';
+    if (allConnected) {
+      if (bestConnectSec == null || t < bestConnectSec) bestConnectSec = t;
+      ui.bestTime.textContent = bestConnectSec.toFixed(1) + 's';
+    }
+
+    // --- Render ---
+    render(parseFloat(ui.tubeThresh.value));
+
+    // HUD state
+    updateKeyHUD();
+  }
+
+  // === Boot ===
+  function boot() {
+    shuffleCities();
+    seedAgents();
+    timeStart = performance.now();
+    requestAnimationFrame(step);
+  }
+  boot();
+  </script>
+</body>
+</html>
