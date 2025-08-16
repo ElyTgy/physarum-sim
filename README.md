@@ -43,3 +43,4 @@ Before running this project, you'll need:
 The application will start on `http://localhost:3000` using npm start
 
 
+# physarum-sim
