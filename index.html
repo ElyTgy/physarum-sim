@@ -91,13 +91,13 @@
       line-height: 1.5;
     }
     
-    .recommended {
+    .starthere {
       border-color: var(--accent);
       position: relative;
     }
     
-    .recommended::before {
-      content: "Recommended";
+    .starthere::before {
+      content: "Start here";
       position: absolute;
       top: -10px;
       left: 50%;
@@ -132,19 +132,19 @@
     </p>
     
     <div class="options">
-      <a href="map.html" class="option-card recommended">
+      <a href="path.html" class="option-card starthere">
+        <div class="option-icon">🧪</div>
+        <div class="option-title">Direct Simulation</div>
+        <div class="option-desc">
+          Test out how the physarium simulation works first
+        </div>
+      </a>
+
+      <a href="map.html" class="option-card ">
         <div class="option-icon">🗺️</div>
         <div class="option-title">Start with Map</div>
         <div class="option-desc">
           Select a location on Google Maps, capture the area, and run the physarum simulation on that real-world terrain.
-        </div>
-      </a>
-      
-      <a href="path.html" class="option-card">
-        <div class="option-icon">🧪</div>
-        <div class="option-title">Direct Simulation</div>
-        <div class="option-desc">
-          Jump straight into the physarum simulation with a synthetic map or upload your own image.
         </div>
       </a>
     </div>
