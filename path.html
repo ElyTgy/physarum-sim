@@ -1,0 +1,732 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Physarum Map Router — Cities & Light Masks</title>
+  <style>
+    :root {
+      --bg: #0b0f14;
+      --panel: #11161d;
+      --ink: #e6edf3;
+      --muted: #93a0ad;
+      --accent: #5cf2c8;
+      --warn: #ff6b6b;
+      --ok: #78e08f;
+      --gold: #ffd166;
+    }
+    html, body { margin:0; height:100%; background:var(--bg); color:var(--ink); font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji"; overflow:hidden; }
+    #wrap { display:grid; grid-template-columns: 1fr 320px; height:100%; }
+    #cwrap { position:relative; background: radial-gradient(1200px 600px at 30% 10%, #0e141b, #070a0f) no-repeat; }
+    #cwrap.has-map { background: transparent; }
+    canvas { position:absolute; inset:0; margin:auto; image-rendering: pixelated; background: transparent; }
+    #map { z-index: 0; }
+    #sim { z-index: 1; mix-blend-mode: normal; }
+    #hud { position:absolute; left:12px; top:12px; background: color-mix(in oklab, var(--panel) 80%, transparent); border:1px solid #1b2330; padding:10px 12px; border-radius:14px; backdrop-filter: blur(8px); box-shadow: 0 10px 30px rgba(0,0,0,.35); z-index: 2; }
+    #hud .row { display:flex; gap:12px; align-items:center; }
+    #hud .tag { font:600 12px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; padding:6px 8px; border-radius:10px; border:1px solid #263042; color:var(--muted); }
+    #hud .kbd { font-weight:700; color:var(--ink); }
+    #hud .on { color:#061b12; background:var(--accent); border-color: transparent; }
+
+    #side { background: linear-gradient(180deg, #0f141c, #0d1219); border-left:1px solid #121a24; padding:16px; box-sizing:border-box; overflow-y:auto; }
+    h1 { font-size:18px; margin:6px 0 2px; letter-spacing:.2px; }
+    h2 { font-size:12px; text-transform:uppercase; color:var(--muted); letter-spacing:.12em; margin:18px 0 8px; }
+    .card { background:var(--panel); border:1px solid #1b2330; border-radius:16px; padding:12px; margin-bottom:10px; box-shadow: 0 10px 40px rgba(0,0,0,.25); }
+    .row { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+    .row + .row { margin-top:10px; }
+    label { font-size:12px; color:var(--muted); }
+    input[type="range"], input[type="text"] { width:100%; }
+    input[type="text"] { background:#0e141c; border:1px solid #1a2332; border-radius:10px; padding:8px 10px; color:var(--ink); }
+    button { background:#131b26; color:var(--ink); border:1px solid #223047; border-radius:12px; padding:8px 10px; cursor:pointer; font-weight:600; }
+    button:active { transform: translateY(1px); }
+    button.primary { background: var(--accent); color:#062217; border-color: transparent; }
+    .muted { color:var(--muted); font-size:12px; }
+    .pill { padding:4px 8px; border:1px solid #223047; border-radius:999px; font:600 12px ui-monospace, SFMono-Regular, monospace; }
+    .grid2 { display:grid; grid-template-columns: 1fr 1fr; gap:8px; }
+    .grid3 { display:grid; grid-template-columns: repeat(3, 1fr); gap:8px; }
+    .metrics { display:grid; grid-template-columns: 1fr 1fr; gap:8px; }
+    .metric { background:#0e141c; border:1px solid #1a2332; border-radius:12px; padding:10px; }
+    .metric b { font-size:16px; }
+    .legend { display:flex; gap:8px; align-items:center; font-size:12px; color:var(--muted); }
+    .dot { width:10px; height:10px; border-radius:50%; display:inline-block; }
+    .dot.food { background:#5cf2c8; box-shadow:0 0 10px #5cf2c8a0; }
+    .dot.repel { background:#ff6b6b; box-shadow:0 0 10px #ff6b6ba0; }
+    .dot.city { background:#82aaff; box-shadow:0 0 10px #82aaffa0; }
+    .dot.tube { background:#f5f7fb; }
+    .dot.mask { background:#ffd166; box-shadow:0 0 10px #ffd166a0; }
+    .help { font-size:12px; color:var(--muted); line-height:1.5; }
+    a { color:var(--accent); text-decoration:none; }
+    #drop { border:1px dashed #2a384f; border-radius:12px; padding:10px; text-align:center; color:var(--muted); }
+    #attr { position:absolute; left:12px; bottom:12px; font: 600 11px/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color:#93a0ad; background: color-mix(in oklab, var(--panel) 80%, transparent); border:1px solid #1b2330; padding:6px 8px; border-radius:10px; backdrop-filter: blur(8px); z-index: 2; }
+    .maskList { display:flex; flex-direction:column; gap:6px; max-height:140px; overflow:auto; }
+    .maskItem { display:flex; align-items:center; justify-content:space-between; gap:8px; background:#0e141c; border:1px solid #1a2332; padding:6px 8px; border-radius:10px; }
+    .maskItem .name { font:600 12px ui-monospace, SFMono-Regular, monospace; color: var(--ink); }
+  </style>
+</head>
+<body>
+  <div id="wrap">
+    <div id="cwrap">
+      <canvas id="map"></canvas>
+      <canvas id="sim"></canvas>
+      <div id="hud">
+        <div class="row" style="gap:8px;margin-bottom:6px;">
+          <span class="tag legend"><span class="dot tube"></span> Tubes</span>
+          <span class="tag legend"><span class="dot food"></span> Food</span>
+          <span class="tag legend"><span class="dot repel"></span> Repellent</span>
+          <span class="tag legend"><span class="dot city"></span> City</span>
+          <span class="tag legend"><span class="dot mask"></span> Light Mask</span>
+        </div>
+        <div class="row">
+          <span class="tag">Brush: <b id="brushName">Food</b></span>
+          <span class="tag">Deposit <b id="depositVal">1.5</b></span>
+          <span class="tag">A: <b class="kbd" id="aLed">OFF</b></span>
+          <span class="tag">B: <b class="kbd" id="bLed">OFF</b></span>
+        </div>
+      </div>
+      <div id="attr" hidden>Map data © OpenStreetMap contributors</div>
+    </div>
+    <div id="side">
+      <h1>Physarum Map Router</h1>
+      <div class="muted">Load a map image, place <b>cities</b> (attractors) and draw <b>light masks</b> (avoid zones). The slime adapts and grows an efficient transport network.</div>
+      <div class="row" style="margin-top:10px;">
+        <button id="backToMapBtn" style="background: var(--muted); color: var(--bg);">← Back to Map Selection</button>
+      </div>
+
+      <h2>Controls</h2>
+      <div class="card help">
+        <div>🖱️ Hold <b>Left Mouse</b> (or press <b>A</b>) to paint. Hold <b>B</b> while painting for <b>Repellent</b>. Tap <b>B</b> to toggle brush.</div>
+        <div>🏙️ Press <b>C</b> then click to place a city; press <b>D</b> then click to delete one.</div>
+        <div>🌓 Press <b>M</b> to start/finish drawing a polygon <b>Light Mask</b>; <b>Enter</b> to close, <b>Esc</b> to cancel.</div>
+        <div>⏯️ Space: pause/resume • <b>R</b>: reset • <b>H</b>: hide/show HUD</div>
+      </div>
+
+      <h2>Session</h2>
+      <div class="card">
+        <div class="metrics">
+          <div class="metric"><label>Connected Cities</label><div><b id="connected">0 / 0</b></div></div>
+          <div class="metric"><label>Active Tube Length</label><div><b id="tubeLen">0</b> cells</div></div>
+          <div class="metric"><label>Time</label><div><b id="timeSec">0.0s</b></div></div>
+          <div class="metric"><label>Best Connect-All</label><div><b id="bestTime">—</b></div></div>
+        </div>
+        <div class="row" style="margin-top:10px; gap:8px; flex-wrap:wrap;">
+          <button id="resetBtn">Reset</button>
+          <button id="togglePauseBtn">Pause</button>
+        </div>
+      </div>
+
+      <h2>Map</h2>
+      <div class="card">
+        <div id="drop">Drop a map image here (PNG/JPG), or use the controls below.</div>
+        <div class="row"><input id="mapUrl" type="text" placeholder="Paste image URL (CORS-permitting)"/></div>
+        <div class="grid2">
+          <button id="loadUrlBtn">Load URL</button>
+          <input id="fileIn" type="file" accept="image/*" />
+        </div>
+        <div class="row"><label>Map Opacity</label><input id="mapAlpha" type="range" min="0" max="1" value="0.45" step="0.01"></div>
+        <div class="grid2" style="margin-top:6px;">
+          <button id="clearMapBtn">Clear Map</button>
+          <button id="sampleTokyoBtn">Load Sample (synthetic)</button>
+        </div>
+        <div class="muted" id="corsWarn" hidden>Note: If the image is from another domain without CORS, "Bake From Map" will be disabled.</div>
+      </div>
+
+      <h2>Light From Map</h2>
+      <div class="card">
+        <div class="row"><label>Enable Baking</label><input id="bakeToggle" type="checkbox"></div>
+        <div class="row"><label>Repel Strength / frame</label><input id="bakeStrength" type="range" min="0.00" max="0.10" value="0.03" step="0.005"></div>
+        <div class="row"><label>Brightness Threshold</label><input id="bakeThresh" type="range" min="0" max="1" value="0.55" step="0.01"></div>
+        <div class="row"><label><input id="bakeInvert" type="checkbox"> Invert (dark areas repel)</label><span></span></div>
+        <div class="muted">Bakes repellent from the map's brightness into the grid each frame (original railway study used <b>light</b> as avoidance).</div>
+      </div>
+
+      <h2>Light Masks</h2>
+      <div class="card">
+        <div class="row"><button id="startMaskBtn">Start Mask (M)</button><button id="finishMaskBtn">Finish</button></div>
+        <div class="row"><label>Mask Strength / frame</label><input id="maskStrength" type="range" min="0.00" max="0.10" value="0.05" step="0.005"></div>
+        <div class="row"><label><input id="showMasks" type="checkbox" checked> Show mask outlines</label><span></span></div>
+        <div class="maskList" id="maskList"></div>
+      </div>
+
+      <h2>Brush & Agents</h2>
+      <div class="card">
+        <div class="row"><label>Deposit (Dial)</label><input id="deposit" type="range" min="0.2" max="5" value="1.5" step="0.1"></div>
+        <div class="row"><label>Brush Radius</label><input id="radius" type="range" min="2" max="30" value="10" step="1"></div>
+        <div class="row"><label>Agents</label><input id="agents" type="range" min="1000" max="15000" value="6000" step="500"></div>
+        <div class="grid2">
+          <button id="brushFood" class="primary">Food</button>
+          <button id="brushRepel">Repellent</button>
+        </div>
+      </div>
+
+      <h2>Fields</h2>
+      <div class="card">
+        <div class="row"><label>Tube Threshold</label><input id="tubeThresh" type="range" min="0.02" max="0.6" value="0.15" step="0.01"></div>
+        <div class="row"><label>Trail Evaporation</label><input id="evap" type="range" min="0.92" max="0.999" value="0.98" step="0.001"></div>
+        <div class="row"><label>Trail Diffusion</label><input id="diff" type="range" min="0" max="0.45" value="0.16" step="0.01"></div>
+        <div class="row"><label>Food Weight</label><input id="wFood" type="range" min="0" max="3" value="1.2" step="0.1"></div>
+        <div class="row"><label>Repel Weight</label><input id="wRepel" type="range" min="0" max="5" value="2.2" step="0.1"></div>
+      </div>
+
+      <h2>How it works</h2>
+      <div class="card help">
+        <p>Thousands of agent particles wander, sampling a chemo field = (trail + food×weight − repellent×weight). They turn toward stronger values, move, and deposit trail. Fields diffuse & evaporate each frame. When trail density crosses a threshold, we render it as tubes.</p>
+        <p>Load a map. Draw <b>light masks</b> to repel growth in selected areas, or <b>bake</b> repellent from bright map regions. Place <b>cities</b> to feed the network and watch it adapt.</p>
+      </div>
+
+      <div class="muted" style="margin-top:8px;">Made for custom controllers: map your hardware buttons to keyboard <b>A</b> and <b>B</b>, or just use mouse/keys.</div>
+    </div>
+  </div>
+
+  <script>
+  // ==============================
+  // Grid & Simulation parameters
+  // ==============================
+  const GRID_W = 256;
+  const GRID_H = 144;
+  const N = GRID_W * GRID_H;
+
+  const AGENT_STEP = 1.0;
+  const SENSOR_DIST = 5;
+  const SENSOR_ANGLE = 0.45;
+  const TURN_ANGLE = 0.30;
+  const RANDOM_STEER = 0.08;
+
+  const FOOD_SOURCE_STRENGTH = 0.045;
+  const FOOD_CONSUMPTION = 0.20;
+  const TRAIL_DEPOSIT_AGENT = 0.045;
+
+  // DOM refs
+  const canvasMap = document.getElementById('map');
+  const canvas = document.getElementById('sim');
+  const mapCtx = canvasMap.getContext('2d');
+  const ctx = canvas.getContext('2d');
+  const attr = document.getElementById('attr');
+
+  const hud = {
+    brushName: document.getElementById('brushName'),
+    depositVal: document.getElementById('depositVal'),
+    aLed: document.getElementById('aLed'),
+    bLed: document.getElementById('bLed'),
+  };
+  const ui = {
+    deposit: document.getElementById('deposit'),
+    radius: document.getElementById('radius'),
+    agents: document.getElementById('agents'),
+    brushFood: document.getElementById('brushFood'),
+    brushRepel: document.getElementById('brushRepel'),
+    tubeThresh: document.getElementById('tubeThresh'),
+    evap: document.getElementById('evap'),
+    diff: document.getElementById('diff'),
+    wFood: document.getElementById('wFood'),
+    wRepel: document.getElementById('wRepel'),
+
+    resetBtn: document.getElementById('resetBtn'),
+    togglePauseBtn: document.getElementById('togglePauseBtn'),
+
+    connected: document.getElementById('connected'),
+    tubeLen: document.getElementById('tubeLen'),
+    timeSec: document.getElementById('timeSec'),
+    bestTime: document.getElementById('bestTime'),
+
+    // Map UI
+    drop: document.getElementById('drop'),
+    mapUrl: document.getElementById('mapUrl'),
+    loadUrlBtn: document.getElementById('loadUrlBtn'),
+    fileIn: document.getElementById('fileIn'),
+    mapAlpha: document.getElementById('mapAlpha'),
+    clearMapBtn: document.getElementById('clearMapBtn'),
+    sampleTokyoBtn: document.getElementById('sampleTokyoBtn'),
+    corsWarn: document.getElementById('corsWarn'),
+
+    // Baking UI
+    bakeToggle: document.getElementById('bakeToggle'),
+    bakeStrength: document.getElementById('bakeStrength'),
+    bakeThresh: document.getElementById('bakeThresh'),
+    bakeInvert: document.getElementById('bakeInvert'),
+
+    // Masks UI
+    startMaskBtn: document.getElementById('startMaskBtn'),
+    finishMaskBtn: document.getElementById('finishMaskBtn'),
+    maskStrength: document.getElementById('maskStrength'),
+    showMasks: document.getElementById('showMasks'),
+    maskList: document.getElementById('maskList'),
+  };
+
+  // Canvas sizing
+  function fitCanvas() {
+    const {clientWidth: w, clientHeight: h} = document.getElementById('cwrap');
+    const scale = Math.max(1, Math.min((w/GRID_W)|0, (h/GRID_H)|0));
+    const cw = GRID_W * scale;
+    const ch = GRID_H * scale;
+    for (const c of [canvasMap, canvas]) {
+      c.width = cw; c.height = ch; c.style.width = cw + 'px'; c.style.height = ch + 'px';
+    }
+  }
+  window.addEventListener('resize', fitCanvas);
+  fitCanvas();
+
+  // Fields
+  let trail = new Float32Array(N);
+  let food  = new Float32Array(N);
+  let repel = new Float32Array(N);
+  let trailNext = new Float32Array(N);
+  let foodNext  = new Float32Array(N);
+  let repelNext = new Float32Array(N);
+
+  // Cities
+  const cities = [];
+  function addCity(x, y) { cities.push({x, y}); }
+  function removeCity(x, y) {
+    const radius = 20;
+    const i = cities.findIndex(c => (c.x-x)**2 + (c.y-y)**2 <= radius*radius);
+    if (i !== -1) { cities.splice(i,1); return true; }
+    return false;
+  }
+  function clearCities() { cities.length = 0; }
+
+  // Agents
+  let AGENTS = parseInt(ui.agents.value, 10);
+  let ax = new Float32Array(AGENTS);
+  let ay = new Float32Array(AGENTS);
+  let aa = new Float32Array(AGENTS);
+
+  function seedAgents() {
+    ax = new Float32Array(AGENTS);
+    ay = new Float32Array(AGENTS);
+    aa = new Float32Array(AGENTS);
+    for (let i=0;i<AGENTS;i++) {
+      if (cities.length) {
+        const c = cities[i % cities.length];
+        const r = 8 + Math.random()*12;
+        const t = Math.random()*Math.PI*2;
+        ax[i] = clamp(c.x + Math.cos(t)*r, 1, GRID_W-2);
+        ay[i] = clamp(c.y + Math.sin(t)*r, 1, GRID_H-2);
+      } else {
+        ax[i] = Math.random()*GRID_W;
+        ay[i] = Math.random()*GRID_H;
+      }
+      aa[i] = Math.random()*Math.PI*2;
+    }
+  }
+
+  // Utils
+  const clamp = (v, lo, hi) => v<lo?lo:(v>hi?hi:v);
+  const idx = (x,y)=> (y|0)*GRID_W + (x|0);
+  function sample(field, x, y) { x=clamp(x|0,0,GRID_W-1); y=clamp(y|0,0,GRID_H-1); return field[idx(x,y)]; }
+  function depositCircle(field, cx, cy, radius, amount) {
+    const r2 = radius*radius;
+    const x0 = Math.max(1, (cx - radius)|0), x1 = Math.min(GRID_W-2, (cx + radius)|0);
+    const y0 = Math.max(1, (cy - radius)|0), y1 = Math.min(GRID_H-2, (cy + radius)|0);
+    for (let y=y0;y<=y1;y++) {
+      const dy=y-cy, dy2=dy*dy;
+      for (let x=x0;x<=x1;x++) {
+        const dx=x-cx; if (dx*dx+dy2<=r2) {
+          const id=idx(x,y); field[id]=Math.min(1.5, field[id]+amount);
+        }
+      }
+    }
+  }
+
+  function diffuseEvaporate(src, dst, diffusion, evap) {
+    const a = diffusion/8;
+    let i=0;
+    for (let y=0;y<GRID_H;y++) {
+      for (let x=0;x<GRID_W;x++,i++) {
+        const xm = x===0?0:-1, xp=x===GRID_W-1?0:1;
+        const ym = y===0?0:-GRID_W, yp=y===GRID_H-1?0:GRID_W;
+        const v = src[i]*(1-8*a) + a*(src[i+xm]+src[i+xp]+src[i+ym]+src[i+yp]+src[i+xm+ym]+src[i+xp+ym]+src[i+xm+yp]+src[i+xp+yp]);
+        dst[i] = v*evap;
+      }
+    }
+  }
+
+  // Input state
+  let isDown=false; let mouseX=0, mouseY=0;
+  let keyA=false, keyB=false; let cityMode=false, deleteMode=false; let showHUD=true;
+  let maskDrawMode=false;
+
+  canvas.addEventListener('pointerdown', (e)=>{ isDown=true; setMouse(e); });
+  window.addEventListener('pointerup', ()=> isDown=false);
+  window.addEventListener('pointermove', setMouse);
+  function setMouse(e){
+    const rect = canvas.getBoundingClientRect();
+    const sx = (e.clientX-rect.left)/rect.width; const sy=(e.clientY-rect.top)/rect.height;
+    mouseX = clamp(Math.round(sx*GRID_W),0,GRID_W-1);
+    mouseY = clamp(Math.round(sy*GRID_H),0,GRID_H-1);
+    if (isDown) {
+      if (cityMode) { addCity(mouseX, mouseY); cityMode=false; updateModeButtons(); flashButton('startMaskBtn'); }
+      else if (deleteMode) { const ok = removeCity(mouseX,mouseY); deleteMode = !ok; updateModeButtons(); }
+      else if (maskDrawMode) { addMaskPoint(mouseX, mouseY); }
+      else { paintAtMouse(); }
+    }
+  }
+
+  window.addEventListener('keydown', (e)=>{
+    if (e.repeat) return;
+    if (e.key==='a'||e.key==='A') keyA=true;
+    if (e.key==='b'||e.key==='B') { keyB=true; toggleBrush(); }
+    if (e.key===' ') { togglePause(); }
+    if (e.key==='r'||e.key==='R') { reset(); }
+    if (e.key==='c'||e.key==='C') { cityMode=!cityMode; deleteMode=false; maskDrawMode=false; updateModeButtons(); }
+    if (e.key==='d'||e.key==='D') { deleteMode=!deleteMode; cityMode=false; maskDrawMode=false; updateModeButtons(); }
+    if (e.key==='m'||e.key==='M') { toggleMaskDraw(); }
+    if (e.key==='h'||e.key==='H') { showHUD=!showHUD; document.getElementById('hud').style.display = showHUD?'block':'none'; }
+    if (e.key==='Enter') { if (maskDrawMode) finishMask(); }
+    if (e.key==='Escape') { if (maskDrawMode) cancelMask(); }
+  });
+  window.addEventListener('keyup', (e)=>{ if (e.key==='a'||e.key==='A') keyA=false; if (e.key==='b'||e.key==='B') keyB=false; });
+  window.addEventListener('wheel', (e)=>{
+    const v = parseFloat(ui.deposit.value); const nv = clamp(v + (e.deltaY<0?0.1:-0.1), parseFloat(ui.deposit.min), parseFloat(ui.deposit.max));
+    ui.deposit.value = nv.toFixed(1); ui.deposit.dispatchEvent(new Event('input'));
+  }, {passive:true});
+
+  function flashButton(id){ const b=document.getElementById(id); const old=b.style.boxShadow; b.style.boxShadow='0 0 0 3px #5cf2c866'; setTimeout(()=>b.style.boxShadow=old,300); }
+  function updateModeButtons(){ ui.startMaskBtn.classList.toggle('primary', maskDrawMode); }
+
+  // Brush state
+  let brush='food';
+  function toggleBrush(){ brush = (brush==='food')?'repel':'food'; updateBrushButtons(); }
+  function setBrush(b){ brush=b; updateBrushButtons(); }
+  function updateBrushButtons(){ ui.brushFood.classList.toggle('primary', brush==='food'); ui.brushRepel.classList.toggle('primary', brush==='repel'); hud.brushName.textContent = brush==='food'?'Food':'Repellent'; }
+  ui.brushFood.addEventListener('click', ()=> setBrush('food'));
+  ui.brushRepel.addEventListener('click', ()=> setBrush('repel'));
+
+  function paintAtMouse(){ if (cityMode||deleteMode||maskDrawMode) return; const rad=parseInt(ui.radius.value,10); const amount=parseFloat(ui.deposit.value)*0.08; const mode = (keyA||isDown)&&keyB ? 'repel' : brush; if (mode==='food') depositCircle(food, mouseX, mouseY, rad, amount); else depositCircle(repel, mouseX, mouseY, rad, amount); }
+  function updateKeyHUD(){ hud.aLed.textContent=(keyA||isDown)?'ON':'OFF'; hud.aLed.parentElement.classList.toggle('on', keyA||isDown); hud.bLed.textContent=keyB?'ON':'OFF'; hud.bLed.parentElement.classList.toggle('on', keyB); hud.depositVal.textContent=parseFloat(ui.deposit.value).toFixed(1); }
+
+  // Rendering
+  const img = ctx.createImageData(GRID_W, GRID_H);
+  function render(tubeThreshold){
+    // draw tubes/fields
+    const data=img.data;
+    for (let i=0;i<N;i++){
+      const tr=trail[i]; const isTube = tr>tubeThreshold; const f=food[i]; const r=repel[i];
+      let R=0,G=0,B=0,A=0; // transparent background
+      if (isTube) { const v = clamp(tr*1.2, 0, 1.2); R = v*240; G = v*245; B = v*250; A = v*255; }
+      if (f>0.02){ const v = f*0.8; R = Math.max(R, v*10); G = Math.max(G, v*160); B = Math.max(B, v*140); A = Math.max(A, v*255); }
+      if (r>0.02){ const v = r*0.8; R = Math.max(R, v*220); A = Math.max(A, v*255); }
+      const o=i*4; data[o]=clamp(R,0,255); data[o+1]=clamp(G,0,255); data[o+2]=clamp(B,0,255); data[o+3]=clamp(A,0,255);
+    }
+    const tmp=document.createElement('canvas'); tmp.width=GRID_W; tmp.height=GRID_H; tmp.getContext('2d').putImageData(img,0,0);
+    ctx.imageSmoothingEnabled=false; ctx.clearRect(0,0,canvas.width,canvas.height); ctx.drawImage(tmp,0,0,canvas.width,canvas.height);
+
+    // cities
+    const sx = canvas.width/GRID_W, sy = canvas.height/GRID_H;
+    for (const c of cities){ ctx.beginPath(); ctx.arc(c.x*sx, c.y*sy, 6, 0, Math.PI*2); ctx.fillStyle='#82aaff'; ctx.shadowColor='#82aaff'; ctx.shadowBlur=8; ctx.fill(); ctx.shadowBlur=0; ctx.lineWidth=2; ctx.strokeStyle='#2a3e66'; ctx.stroke(); }
+
+    // mask overlay
+    if (ui.showMasks.checked) drawMasksOverlay();
+  }
+
+  // Connectivity & metrics
+  const comp = new Int32Array(N);
+  function computeMetrics(threshold){
+    comp.fill(-1); let compId=0; const stack = new Int32Array(N);
+    for (let i=0;i<N;i++){
+      if (comp[i]!==-1) continue; if (trail[i]<=threshold){ comp[i]=-2; continue; }
+      let top=0; stack[top++]=i; comp[i]=compId;
+      while (top){ const p=stack[--top]; const x=p%GRID_W, y=(p/GRID_W)|0; for (let dy=-1;dy<=1;dy++) for (let dx=-1;dx<=1;dx++){ if (!dx && !dy) continue; const nx=x+dx, ny=y+dy; if (nx<0||nx>=GRID_W||ny<0||ny>=GRID_H) continue; const q=ny*GRID_W+nx; if (comp[q]===-1 && trail[q]>threshold){ comp[q]=compId; stack[top++]=q; } } }
+      compId++;
+    }
+    let active=0; for (let i=0;i<N;i++) if (trail[i]>threshold) active++;
+    let connectedCount=0; const cityComps=new Set();
+    for (const c of cities){ const id=comp[idx(c.x|0,c.y|0)]; if (id>=0){ cityComps.add(id); connectedCount++; } }
+    const allConnected = (connectedCount===cities.length && cityComps.size===1 && cities.length>0);
+    return {active, connectedCount, allConnected};
+  }
+
+  // Main loop
+  let paused=false; let timeStart=performance.now(); let bestConnectSec=null;
+  function togglePause(){ paused=!paused; ui.togglePauseBtn.textContent = paused? 'Resume' : 'Pause'; }
+  ui.togglePauseBtn.addEventListener('click', togglePause);
+  ui.resetBtn.addEventListener('click', reset);
+
+  function reset(){ trail.fill(0); food.fill(0); repel.fill(0); trailNext.fill(0); foodNext.fill(0); repelNext.fill(0); timeStart=performance.now(); seedAgents(); }
+
+  ui.deposit.addEventListener('input', ()=> hud.depositVal.textContent=parseFloat(ui.deposit.value).toFixed(1));
+  ui.agents.addEventListener('input', ()=>{ AGENTS=parseInt(ui.agents.value,10); seedAgents(); });
+
+  ui.mapAlpha.addEventListener('input', drawMap);
+
+  // ===============
+  // Map handling
+  // ===============
+  let mapImg = new Image();
+  mapImg.crossOrigin = 'anonymous';
+  let mapLoaded=false; let mapReadable=false; // readable => can sample pixels (CORS ok)
+
+  const mapBuf = document.createElement('canvas'); mapBuf.width=GRID_W; mapBuf.height=GRID_H; const mapBufCtx = mapBuf.getContext('2d');
+  let mapBright = null; // Float32Array length N with brightness [0,1]
+
+  function drawMap(){
+    mapCtx.clearRect(0,0,canvasMap.width,canvasMap.height);
+    mapCtx.globalAlpha = parseFloat(ui.mapAlpha.value);
+    if (mapLoaded){
+      // Fit contain
+      const cw=canvasMap.width, ch=canvasMap.height; const iw=mapImg.naturalWidth, ih=mapImg.naturalHeight;
+      const s = Math.min(cw/iw, ch/ih); const w=iw*s, h=ih*s; const x=(cw-w)/2, y=(ch-h)/2; mapCtx.drawImage(mapImg, x, y, w, h);
+    }
+    mapCtx.globalAlpha = 1;
+  }
+
+  async function loadMapFromUrl(url){
+    mapReadable=true; // optimistic; may flip if tainted
+    mapImg = new Image(); mapImg.crossOrigin='anonymous'; mapImg.onload = ()=>{ mapLoaded=true; drawMap(); tryBakePrepare(); document.getElementById('cwrap').classList.add('has-map'); }; mapImg.onerror = ()=>{ mapLoaded=false; ui.corsWarn.hidden=false; };
+    mapImg.src = url; attr.hidden=false; // show attribution text; user should ensure rights
+  }
+
+  function loadMapFromFile(file){
+    const url = URL.createObjectURL(file); mapReadable=true; mapImg = new Image(); mapImg.onload = ()=>{ mapLoaded=true; drawMap(); tryBakePrepare(); document.getElementById('cwrap').classList.add('has-map'); URL.revokeObjectURL(url); }; mapImg.src = url; attr.hidden=true; // local file — no external attribution implied
+  }
+
+  // Function to load captured screenshot from sessionStorage
+  function loadCapturedScreenshot() {
+    const screenshotDataUrl = sessionStorage.getItem('mapScreenshot');
+    const locationData = sessionStorage.getItem('locationData');
+    
+    if (screenshotDataUrl) {
+      mapReadable = true;
+      mapImg = new Image();
+      mapImg.onload = () => {
+        mapLoaded = true;
+        drawMap();
+        tryBakePrepare();
+        document.getElementById('cwrap').classList.add('has-map');
+        
+        // Show location info if available
+        if (locationData) {
+          try {
+            const location = JSON.parse(locationData);
+            console.log('Loaded location data:', location);
+            // You could display this information in the UI if desired
+          } catch (e) {
+            console.error('Error parsing location data:', e);
+          }
+        }
+      };
+      mapImg.onerror = () => {
+        mapLoaded = false;
+        console.error('Failed to load captured screenshot');
+      };
+      mapImg.src = screenshotDataUrl;
+      attr.hidden = true; // No external attribution for captured screenshots
+      
+      // Clear the sessionStorage to free up memory
+      sessionStorage.removeItem('mapScreenshot');
+      sessionStorage.removeItem('locationData');
+      
+      return true;
+    }
+    return false;
+  }
+
+  function tryBakePrepare(){
+    // Draw into GRID-size buffer and compute brightness
+    try {
+      mapBufCtx.clearRect(0,0,GRID_W,GRID_H);
+      // Letterbox-fit into mapBuf as well
+      const iw=mapImg.naturalWidth, ih=mapImg.naturalHeight; const s=Math.min(GRID_W/iw, GRID_H/ih); const w=iw*s, h=ih*s; const x=(GRID_W-w)/2, y=(GRID_H-h)/2;
+      mapBufCtx.drawImage(mapImg, x, y, w, h);
+      const imgData = mapBufCtx.getImageData(0,0,GRID_W,GRID_H); const d=imgData.data; const arr = new Float32Array(N);
+      for (let i=0;i<N;i++){ const o=i*4; const r=d[o], g=d[o+1], b=d[o+2]; arr[i]=(0.2126*r + 0.7152*g + 0.0722*b)/255; }
+      mapBright = arr; mapReadable=true; ui.corsWarn.hidden=true;
+    } catch (e) {
+      mapReadable=false; mapBright=null; ui.corsWarn.hidden=false; console.warn('Map not readable (likely CORS). Baking disabled.');
+    }
+  }
+
+  ui.loadUrlBtn.addEventListener('click', ()=>{ const url=ui.mapUrl.value.trim(); if (url) loadMapFromUrl(url); });
+  ui.fileIn.addEventListener('change', (e)=>{ if (e.target.files && e.target.files[0]) loadMapFromFile(e.target.files[0]); });
+  ui.clearMapBtn.addEventListener('click', ()=>{ mapLoaded=false; mapBright=null; mapCtx.clearRect(0,0,canvasMap.width,canvasMap.height); document.getElementById('cwrap').classList.remove('has-map'); attr.hidden=true; });
+  
+  // Back to map selection button
+  document.getElementById('backToMapBtn').addEventListener('click', () => {
+    window.location.href = 'index.html';
+  });
+
+  // Drag & drop
+  ui.drop.addEventListener('dragover', (e)=>{ e.preventDefault(); ui.drop.style.borderColor='#5cf2c888'; });
+  ui.drop.addEventListener('dragleave', ()=> ui.drop.style.borderColor='#2a384f');
+  ui.drop.addEventListener('drop', (e)=>{ e.preventDefault(); ui.drop.style.borderColor='#2a384f'; const f = e.dataTransfer.files && e.dataTransfer.files[0]; if (f) loadMapFromFile(f); });
+
+  // Synthetic sample (procedural) — avoids CORS and heavy assets
+  ui.sampleTokyoBtn.addEventListener('click', ()=>{
+    const off = document.createElement('canvas'); off.width=1024; off.height=576; const g=off.getContext('2d');
+    // background
+    g.fillStyle='#0b0f14'; g.fillRect(0,0,off.width,off.height);
+    // draw pseudo-coastline + rivers (light areas => repellent when not inverted)
+    g.strokeStyle='#c8d2dc'; g.lineWidth=3;
+    g.beginPath(); g.moveTo(50,400); g.bezierCurveTo(200,320, 380,380, 520,340); g.bezierCurveTo(680,300, 820,360, 980,300); g.stroke();
+    for (let i=0;i<6;i++){ g.beginPath(); g.moveTo(200+ i*120, 0); g.lineTo(150+i*120, 300+Math.random()*60); g.stroke(); }
+    // parks/mountains
+    g.fillStyle='#a9b8c6'; for (let i=0;i<12;i++){ const x=60+Math.random()*900, y=100+Math.random()*380, r=10+Math.random()*30; g.beginPath(); g.arc(x,y,r,0,Math.PI*2); g.fill(); }
+    // road hints (dark) so they won't repel
+    g.strokeStyle='#2a323b'; g.lineWidth=10; g.lineCap='round';
+    g.beginPath(); g.moveTo(120,520); g.lineTo(500,300); g.lineTo(900,260); g.stroke();
+
+    mapImg = new Image(); mapImg.onload=()=>{ mapLoaded=true; drawMap(); tryBakePrepare(); document.getElementById('cwrap').classList.add('has-map'); }; mapImg.src = off.toDataURL('image/png'); attr.hidden=true;
+  });
+
+  // Baking from map brightness → repellent field
+  function bakeFromMap(){
+    if (!ui.bakeToggle.checked || !mapBright || !mapReadable) return;
+    const k = parseFloat(ui.bakeStrength.value); const th = parseFloat(ui.bakeThresh.value); const inv = ui.bakeInvert.checked;
+    for (let i=0;i<N;i++){
+      const b = mapBright[i];
+      const cond = inv ? (b < th) : (b > th);
+      if (cond) repel[i] = Math.min(1.5, repel[i] + k);
+    }
+  }
+
+  // ==================
+  // Light Mask system
+  // ==================
+  const masks = []; // each { id, name, pts:[{x,y}], indices:Uint32Array, enabled:boolean, strength:number }
+  let curMask = null; let maskCounter=1;
+
+  function toggleMaskDraw(){ if (maskDrawMode) finishMask(); else startMask(); }
+  function startMask(){ maskDrawMode=true; cityMode=false; deleteMode=false; curMask = { id: maskCounter++, name: 'Mask '+maskCounter, pts:[], indices:null, enabled:true, strength: parseFloat(ui.maskStrength.value) }; updateModeButtons(); }
+  function addMaskPoint(x,y){ if (!curMask) return; curMask.pts.push({x, y}); drawMasksOverlay(); }
+  function cancelMask(){ maskDrawMode=false; curMask=null; updateModeButtons(); drawMasksOverlay(); }
+  function finishMask(){ if (!curMask) return; if (curMask.pts.length<3){ cancelMask(); return; } rasterizeMask(curMask); masks.push(curMask); curMask=null; maskDrawMode=false; updateModeButtons(); rebuildMaskList(); }
+
+  ui.startMaskBtn.addEventListener('click', toggleMaskDraw);
+  ui.finishMaskBtn.addEventListener('click', finishMask);
+  ui.maskStrength.addEventListener('input', ()=>{ if (curMask) curMask.strength = parseFloat(ui.maskStrength.value); });
+
+  function drawMasksOverlay(){
+    // overlay on SIM canvas (on top of tubes)
+    const sx = canvas.width/GRID_W, sy = canvas.height/GRID_H;
+    ctx.save();
+    if (ui.showMasks.checked){
+      ctx.lineWidth = 2; ctx.strokeStyle = '#ffd166'; ctx.fillStyle = 'rgba(255,209,102,0.12)';
+      for (const m of masks){ if (!m.enabled) continue; ctx.beginPath(); for (let i=0;i<m.pts.length;i++){ const p=m.pts[i]; const x=p.x*sx, y=p.y*sy; if (i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y); } ctx.closePath(); ctx.fill(); ctx.stroke(); }
+      if (maskDrawMode && curMask && curMask.pts.length){
+        ctx.beginPath(); for (let i=0;i<curMask.pts.length;i++){ const p=curMask.pts[i]; const x=p.x*sx, y=p.y*sy; if (i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y); }
+        // live vertex indicator
+        const last = curMask.pts[curMask.pts.length-1]; if (last){ ctx.lineTo(mouseX*sx, mouseY*sy); }
+        ctx.strokeStyle='#ffd166'; ctx.setLineDash([6,4]); ctx.stroke(); ctx.setLineDash([]);
+      }
+    }
+    ctx.restore();
+  }
+
+  function rasterizeMask(m){
+    // Compute bounding box
+    let minX=Infinity, minY=Infinity, maxX=-Infinity, maxY=-Infinity;
+    for (const p of m.pts){ if (p.x<minX) minX=p.x; if (p.x>maxX) maxX=p.x; if (p.y<minY) minY=p.y; if (p.y>maxY) maxY=p.y; }
+    minX = clamp(minX|0, 0, GRID_W-1); maxX = clamp(maxX|0, 0, GRID_W-1); minY = clamp(minY|0, 0, GRID_H-1); maxY = clamp(maxY|0, 0, GRID_H-1);
+    const idxs = [];
+    for (let y=minY; y<=maxY; y++){
+      for (let x=minX; x<=maxX; x++){
+        if (pointInPoly(x+0.5, y+0.5, m.pts)) idxs.push(idx(x,y));
+      }
+    }
+    m.indices = new Uint32Array(idxs);
+  }
+  function pointInPoly(x,y,pts){ // ray cast
+    let inside=false; for (let i=0, j=pts.length-1; i<pts.length; j=i++){
+      const xi=pts[i].x, yi=pts[i].y; const xj=pts[j].x, yj=pts[j].y;
+      const intersect = ((yi>y)!==(yj>y)) && (x < (xj-xi)*(y-yi)/(yj-yi+1e-9) + xi);
+      if (intersect) inside=!inside;
+    } return inside;
+  }
+
+  function rebuildMaskList(){
+    ui.maskList.innerHTML='';
+    for (const m of masks){
+      const div=document.createElement('div'); div.className='maskItem';
+      const left=document.createElement('div'); left.className='name'; left.textContent=m.name; div.appendChild(left);
+      const right=document.createElement('div'); right.style.display='flex'; right.style.gap='6px';
+      const tog=document.createElement('button'); tog.textContent = m.enabled? 'On' : 'Off'; tog.style.background = m.enabled? 'var(--ok)' : '#131b26'; tog.onclick=()=>{ m.enabled=!m.enabled; tog.textContent=m.enabled?'On':'Off'; tog.style.background = m.enabled? 'var(--ok)' : '#131b26'; };
+      const del=document.createElement('button'); del.textContent='Delete'; del.style.background='var(--warn)'; del.onclick=()=>{ const k=masks.indexOf(m); if (k>=0) masks.splice(k,1); rebuildMaskList(); };
+      right.appendChild(tog); right.appendChild(del); div.appendChild(right); ui.maskList.appendChild(div);
+    }
+  }
+
+  function depositMasks(){
+    for (const m of masks){ if (!m.enabled || !m.indices) continue; const s = m.strength; const arr = m.indices; for (let k=0;k<arr.length;k++){ const i=arr[k]; repel[i] = Math.min(1.5, repel[i] + s); } }
+    if (maskDrawMode && curMask) curMask.strength = parseFloat(ui.maskStrength.value);
+  }
+
+  // ===============
+  // Main step loop
+  // ===============
+  function step(){
+    requestAnimationFrame(step);
+    if (paused){ render(parseFloat(ui.tubeThresh.value)); return; }
+
+    if ((isDown||keyA) && !cityMode && !deleteMode && !maskDrawMode) paintAtMouse();
+
+    // Cities feed food
+    for (const c of cities) depositCircle(food, c.x, c.y, 5, FOOD_SOURCE_STRENGTH);
+
+    // Masks deposit repellent continuously
+    depositMasks();
+
+    // Bake repellent from map brightness if enabled
+    bakeFromMap();
+
+    // Agents
+    const wFood = parseFloat(ui.wFood.value), wRep = parseFloat(ui.wRepel.value);
+    for (let i=0;i<AGENTS;i++){
+      let x=ax[i], y=ay[i], a=aa[i];
+      const fx=x+Math.cos(a)*SENSOR_DIST, fy=y+Math.sin(a)*SENSOR_DIST;
+      const lx=x+Math.cos(a-SENSOR_ANGLE)*SENSOR_DIST, ly=y+Math.sin(a-SENSOR_ANGLE)*SENSOR_DIST;
+      const rx=x+Math.cos(a+SENSOR_ANGLE)*SENSOR_DIST, ry=y+Math.sin(a+SENSOR_ANGLE)*SENSOR_DIST;
+      const vF = sample(trail,fx,fy) + wFood*sample(food,fx,fy) - wRep*sample(repel,fx,fy);
+      const vL = sample(trail,lx,ly) + wFood*sample(food,lx,ly) - wRep*sample(repel,lx,ly);
+      const vR = sample(trail,rx,ry) + wFood*sample(food,rx,ry) - wRep*sample(repel,rx,ry);
+      if (vL>vF && vL>vR) a-=TURN_ANGLE; else if (vR>vF && vR>vL) a+=TURN_ANGLE; else a+=(Math.random()-0.5)*RANDOM_STEER;
+      x+=Math.cos(a)*AGENT_STEP; y+=Math.sin(a)*AGENT_STEP;
+      if (x<1) x=GRID_W-2; else if (x>GRID_W-2) x=1; if (y<1) y=GRID_H-2; else if (y>GRID_H-2) y=1;
+      const id=idx(x|0,y|0);
+      trail[id] = Math.min(1.5, trail[id] + TRAIL_DEPOSIT_AGENT);
+      const f=food[id]; if (f>0.001){ const eat=Math.min(FOOD_CONSUMPTION, f); food[id]=f-eat; trail[id]=Math.min(1.5, trail[id] + eat*0.8); }
+      ax[i]=x; ay[i]=y; aa[i]=a;
+    }
+
+    // Fields evolve
+    const evap = parseFloat(ui.evap.value), diff = parseFloat(ui.diff.value);
+    diffuseEvaporate(trail, trailNext, diff, evap);
+    diffuseEvaporate(food,  foodNext,  diff*0.7,  0.995);
+    diffuseEvaporate(repel, repelNext, diff*0.9,  0.985);
+    [trail, trailNext] = [trailNext, trail];
+    [food,  foodNext]  = [foodNext,  food];
+    [repel, repelNext] = [repelNext, repel];
+
+    // Metrics
+    const {active, connectedCount, allConnected} = computeMetrics(parseFloat(ui.tubeThresh.value));
+    ui.connected.textContent = `${connectedCount} / ${cities.length}`;
+    ui.tubeLen.textContent = active.toString();
+    const t = (performance.now()-timeStart)/1000; ui.timeSec.textContent=t.toFixed(1)+'s'; if (allConnected){ if (bestConnectSec==null||t<bestConnectSec) bestConnectSec=t; ui.bestTime.textContent = bestConnectSec.toFixed(1)+'s'; }
+
+    // Draw
+    drawMap(); // redraw map with current opacity (cheap)
+    render(parseFloat(ui.tubeThresh.value));
+    updateKeyHUD();
+  }
+
+  // Boot
+  function boot(){
+    // Check if we have a captured screenshot to load
+    const hasScreenshot = loadCapturedScreenshot();
+    
+    if (!hasScreenshot) {
+      // Only add initial cities if we don't have a captured screenshot
+      // This means user came directly to path.html, not from map.html
+      const pad = 14;
+      for (let i = 0; i < 6; i++) {
+        addCity(pad + Math.random() * (GRID_W - 2 * pad), pad + Math.random() * (GRID_H - 2 * pad));
+      }
+    }
+    // If we have a screenshot (from map.html), don't add any cities - let user place them manually
+    
+    seedAgents();
+    timeStart = performance.now();
+    requestAnimationFrame(step);
+  }
+  boot();
+  </script>
+</body>
+</html>
