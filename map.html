@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Google Map + Places Search — Minimal Demo</title>
+  <style>
+    html, body { height: 100%; margin: 0; }
+    #app { height: 100%; position: relative; font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; }
+    #map { position: absolute; inset: 0; }
+
+    .search { position: absolute; top: 16px; left: 16px; z-index: 2; display: flex; gap: 8px; align-items: center; }
+    .search input {
+      width: min(520px, 70vw);
+      padding: 10px 12px;
+      border-radius: 12px;
+      border: 1px solid #d0d7de;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.10);
+      font-size: 16px;
+      outline: none;
+      background: #fff;
+    }
+    .card { position: absolute; bottom: 16px; left: 16px; background: rgba(255,255,255,0.98); border: 1px solid #e5e7eb; border-radius: 12px; padding: 10px 12px; box-shadow: 0 6px 20px rgba(0,0,0,0.12); z-index: 2; min-width: 280px; font-size: 14px; }
+    .card code { background: #f3f4f6; padding: 2px 6px; border-radius: 6px; }
+    .panel { position: absolute; top: 16px; right: 16px; z-index: 3; background: rgba(255,255,255,0.98); border: 1px solid #e5e7eb; border-radius: 12px; padding: 10px; box-shadow: 0 6px 20px rgba(0,0,0,0.12); }
+    .panel button { appearance: none; border: none; background: #2563eb; color: #fff; padding: 10px 14px; border-radius: 10px; font-weight: 600; cursor: pointer; font-size: 14px; }
+    .panel button[disabled] { opacity: 0.5; cursor: not-allowed; }
+    
+    /* Loading overlay */
+    .loading-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.8);
+      display: none;
+      justify-content: center;
+      align-items: center;
+      z-index: 9999;
+      color: white;
+      font-size: 18px;
+    }
+    .loading-spinner {
+      border: 3px solid rgba(255, 255, 255, 0.3);
+      border-top: 3px solid white;
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      animation: spin 1s linear infinite;
+      margin-right: 15px;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div class="search">
+      <input id="search-input" type="text" placeholder="Search for a place, address, or business…" />
+    </div>
+    <div class="panel" aria-label="Selection panel">
+      <button id="backBtn" type="button" title="Back to start" style="background: #6b7280; margin-right: 8px;">← Back</button>
+      <button id="selectBtn" type="button" title="Confirm this location">Select</button>
+    </div>
+    <div id="map" role="region" aria-label="Map"></div>
+    <div class="card" id="placeCard" hidden>
+      <div id="placeTitle" style="font-weight:600"></div>
+      <div id="placeAddr" style="color:#4b5563"></div>
+      <div style="margin-top:6px">LatLng: <code id="latlng"></code></div>
+      <div style="margin-top:6px">Place ID: <code id="placeid"></code></div>
+    </div>
+  </div>
+
+  <!-- Loading overlay -->
+  <div class="loading-overlay" id="loadingOverlay">
+    <div class="loading-spinner"></div>
+    <span>Capturing map and preparing simulation...</span>
+  </div>
+
+  <script>
+    // Replace this with your real API key and restrict it to your domain in Google Cloud Console.
+    const GOOGLE_MAPS_API_KEY = API_KEY;
+
+    // Lazy-load Google Maps JS API with Places library
+    function loadGoogleMaps(cb){
+      const existing = document.getElementById('gmaps');
+      if (existing) return;
+      const s = document.createElement('script');
+      s.id = 'gmaps';
+      s.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(GOOGLE_MAPS_API_KEY)}&libraries=places&callback=initMap`;
+      s.async = true; s.defer = true;
+      document.head.appendChild(s);
+    }
+
+    // Function to capture screenshot of the map
+    async function captureMapScreenshot() {
+      const mapEl = document.getElementById('map');
+      
+      // Create a canvas to capture the map
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      
+      // Set canvas size to match map dimensions
+      canvas.width = mapEl.offsetWidth;
+      canvas.height = mapEl.offsetHeight;
+      
+      // Use html2canvas to capture the map div
+      try {
+        // For now, we'll use a simple approach with html2canvas
+        // You might need to include html2canvas library for better results
+        const html2canvas = window.html2canvas;
+        
+        if (html2canvas) {
+          const screenshot = await html2canvas(mapEl, {
+            useCORS: true,
+            allowTaint: true,
+            backgroundColor: null
+          });
+          
+          return screenshot.toDataURL('image/png');
+        } else {
+          // Fallback: create a simple colored background
+          ctx.fillStyle = '#f0f0f0';
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          
+          // Add some grid lines to simulate a map
+          ctx.strokeStyle = '#ddd';
+          ctx.lineWidth = 1;
+          for (let i = 0; i < canvas.width; i += 50) {
+            ctx.beginPath();
+            ctx.moveTo(i, 0);
+            ctx.lineTo(i, canvas.height);
+            ctx.stroke();
+          }
+          for (let i = 0; i < canvas.height; i += 50) {
+            ctx.beginPath();
+            ctx.moveTo(0, i);
+            ctx.lineTo(canvas.width, i);
+            ctx.stroke();
+          }
+          
+          return canvas.toDataURL('image/png');
+        }
+      } catch (error) {
+        console.error('Error capturing screenshot:', error);
+        // Return a fallback image
+        ctx.fillStyle = '#f0f0f0';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        return canvas.toDataURL('image/png');
+      }
+    }
+
+    // Function to transition to path.html with the captured image
+    async function transitionToPath(screenshotDataUrl, locationData) {
+      // Store the screenshot and location data in sessionStorage
+      sessionStorage.setItem('mapScreenshot', screenshotDataUrl);
+      sessionStorage.setItem('locationData', JSON.stringify(locationData));
+      
+      // Navigate to path.html
+      window.location.href = 'path.html';
+    }
+
+    // Expose initMap for the callback parameter
+    window.initMap = function initMap(){
+      const mapEl = document.getElementById('map');
+      const map = new google.maps.Map(mapEl, {
+        center: { lat: 49.2827, lng: -123.1207 }, // Vancouver default
+        zoom: 12,
+        mapTypeControl: false,
+        streetViewControl: false,
+      });
+
+      // Autocomplete attached to the input
+      const input = document.getElementById('search-input');
+      const ac = new google.maps.places.Autocomplete(input, {
+        fields: ["geometry", "name", "formatted_address", "place_id"],
+        types: ["geocode", "establishment"], // broad search
+      });
+      ac.bindTo('bounds', map);
+
+      // Marker + infowindow
+      const marker = new google.maps.Marker({ map, visible: false });
+      const info = new google.maps.InfoWindow();
+
+      const card = document.getElementById('placeCard');
+      const title = document.getElementById('placeTitle');
+      const addr = document.getElementById('placeAddr');
+      const latlng = document.getElementById('latlng');
+      const placeid = document.getElementById('placeid');
+
+      // Panel button for confirming a selection
+      const selectBtn = document.getElementById('selectBtn');
+      const backBtn = document.getElementById('backBtn');
+      const loadingOverlay = document.getElementById('loadingOverlay');
+      let currentSelection = null;
+      selectBtn.disabled = true;
+      
+      // Back button event listener
+      backBtn.addEventListener('click', () => {
+        window.location.href = 'index.html';
+      });
+      
+      selectBtn.addEventListener('click', async () => {
+        if (!currentSelection) return;
+        
+        // Show loading overlay
+        loadingOverlay.style.display = 'flex';
+        
+        try {
+          // Capture screenshot
+          const screenshotDataUrl = await captureMapScreenshot();
+          
+          // Transition to path.html
+          await transitionToPath(screenshotDataUrl, currentSelection);
+        } catch (error) {
+          console.error('Error during transition:', error);
+          loadingOverlay.style.display = 'none';
+          alert('Error capturing map. Please try again.');
+        }
+      });
+
+      ac.addListener('place_changed', () => {
+        info.close();
+        marker.setVisible(false);
+        const place = ac.getPlace();
+        if (!place || !place.geometry || !place.geometry.location) {
+          alert('Please choose a suggestion from the dropdown.');
+          return;
+        }
+
+        // Fit map to place
+        if (place.geometry.viewport) {
+          map.fitBounds(place.geometry.viewport);
+        } else {
+          map.setCenter(place.geometry.location);
+          map.setZoom(15);
+        }
+
+        // Show marker & info
+        marker.setPosition(place.geometry.location);
+        marker.setVisible(true);
+
+        const content = [`<strong>${place.name ?? ''}</strong>`, place.formatted_address ?? ''].filter(Boolean).join('<br>');
+        info.setContent(content);
+        info.open(map, marker);
+
+        // Show details in the card (handy if you want to store them)
+        title.textContent = place.name ?? '(Unnamed)';
+        addr.textContent = place.formatted_address ?? '';
+        latlng.textContent = `${place.geometry.location.lat().toFixed(6)}, ${place.geometry.location.lng().toFixed(6)}`;
+        placeid.textContent = place.place_id ?? '';
+        card.hidden = false;
+        // Enable the Select button with the chosen place
+        currentSelection = { type: 'place', place };
+        selectBtn.disabled = false;
+
+        // Example: emit a CustomEvent with the selected place data (for frameworks to listen to)
+        const evt = new CustomEvent('place-selected', { detail: place });
+        window.dispatchEvent(evt);
+      });
+
+      // Optional: clicking sets marker and reverse-geocodes
+      map.addListener('click', async (e) => {
+        marker.setPosition(e.latLng);
+        marker.setVisible(true);
+        map.panTo(e.latLng);
+        map.setZoom(Math.max(map.getZoom(), 14));
+
+        // Try to reverse-geocode for a friendly label
+        try {
+          const geocoder = new google.maps.Geocoder();
+          const res = await geocoder.geocode({ location: e.latLng });
+          if (res.results?.length) {
+            const r = res.results[0];
+            info.setContent(`<strong>${r.address_components?.[0]?.long_name ?? 'Dropped Pin'}</strong><br>${r.formatted_address}`);
+            info.open(map, marker);
+            title.textContent = 'Dropped Pin';
+            addr.textContent = r.formatted_address;
+            latlng.textContent = `${e.latLng.lat().toFixed(6)}, ${e.latLng.lng().toFixed(6)}`;
+            placeid.textContent = r.place_id ?? '';
+            card.hidden = false;
+            // Enable the Select button for a dropped pin
+            currentSelection = {
+              type: 'latlng',
+              name: 'Dropped Pin',
+              address: r.formatted_address,
+              place_id: r.place_id ?? null,
+              location: { lat: e.latLng.lat(), lng: e.latLng.lng() }
+            };
+            selectBtn.disabled = false;
+          }
+        } catch {}
+      });
+    }
+
+    // Kick off loading
+    loadGoogleMaps();
+  </script>
+  
+  <!-- Include html2canvas for better screenshot capture -->
+  <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+</body>
+</html>
