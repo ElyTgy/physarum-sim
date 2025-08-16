@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Physarum Map Router — Choose Your Path</title>
+  <style>
+    :root {
+      --bg: #0b0f14;
+      --panel: #11161d;
+      --ink: #e6edf3;
+      --muted: #93a0ad;
+      --accent: #5cf2c8;
+      --warn: #ff6b6b;
+      --ok: #78e08f;
+      --gold: #ffd166;
+    }
+    
+    html, body {
+      margin: 0;
+      height: 100%;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    
+    .container {
+      text-align: center;
+      max-width: 600px;
+      padding: 40px 20px;
+    }
+    
+    h1 {
+      font-size: 2.5rem;
+      margin-bottom: 1rem;
+      background: linear-gradient(135deg, var(--accent), var(--gold));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    
+    .subtitle {
+      font-size: 1.2rem;
+      color: var(--muted);
+      margin-bottom: 3rem;
+      line-height: 1.6;
+    }
+    
+    .options {
+      display: flex;
+      gap: 20px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    
+    .option-card {
+      background: var(--panel);
+      border: 1px solid #1b2330;
+      border-radius: 16px;
+      padding: 30px;
+      width: 250px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      text-decoration: none;
+      color: inherit;
+    }
+    
+    .option-card:hover {
+      transform: translateY(-5px);
+      border-color: var(--accent);
+      box-shadow: 0 10px 30px rgba(92, 242, 200, 0.2);
+    }
+    
+    .option-icon {
+      font-size: 3rem;
+      margin-bottom: 1rem;
+    }
+    
+    .option-title {
+      font-size: 1.3rem;
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+    }
+    
+    .option-desc {
+      color: var(--muted);
+      font-size: 0.9rem;
+      line-height: 1.5;
+    }
+    
+    .recommended {
+      border-color: var(--accent);
+      position: relative;
+    }
+    
+    .recommended::before {
+      content: "Recommended";
+      position: absolute;
+      top: -10px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--accent);
+      color: #062217;
+      padding: 4px 12px;
+      border-radius: 12px;
+      font-size: 0.8rem;
+      font-weight: 600;
+    }
+    
+    @media (max-width: 600px) {
+      .options {
+        flex-direction: column;
+        align-items: center;
+      }
+      
+      .option-card {
+        width: 100%;
+        max-width: 300px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Physarum Map Router</h1>
+    <p class="subtitle">
+      Watch slime mold grow efficient transport networks on real maps. 
+      Choose how you'd like to start your simulation.
+    </p>
+    
+    <div class="options">
+      <a href="map.html" class="option-card recommended">
+        <div class="option-icon">🗺️</div>
+        <div class="option-title">Start with Map</div>
+        <div class="option-desc">
+          Select a location on Google Maps, capture the area, and run the physarum simulation on that real-world terrain.
+        </div>
+      </a>
+      
+      <a href="path.html" class="option-card">
+        <div class="option-icon">🧪</div>
+        <div class="option-title">Direct Simulation</div>
+        <div class="option-desc">
+          Jump straight into the physarum simulation with a synthetic map or upload your own image.
+        </div>
+      </a>
+    </div>
+  </div>
+</body>
+</html>
