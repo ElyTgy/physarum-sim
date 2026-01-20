@@ -14,10 +14,6 @@ Before running this project, you'll need:
 ## Installation
 
 1. **Clone or download the project**
-   ```bash
-   git clone <repository-url>
-   cd aterliers25
-   ```
 
 2. **Install dependencies**
    ```bash
