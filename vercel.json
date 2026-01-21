@@ -4,6 +4,11 @@
       "source": "/map.html",
       "destination": "/api/map"
     }
-  ]
+  ],
+  "functions": {
+    "api/map.js": {
+      "includeFiles": "map.html"
+    }
+  }
 }
 
